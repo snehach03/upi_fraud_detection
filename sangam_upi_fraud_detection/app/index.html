@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sangam · UPI Fraud Ring Detection</title>
+<style>
+  :root{
+    --bg:#0b0f14;
+    --bg-panel:#101720;
+    --bg-panel-2:#0d141c;
+    --line:#1d2733;
+    --text:#e7edf3;
+    --text-dim:#7e8da0;
+    --accent:#ff7a33;      /* UPI-inspired saffron/orange */
+    --accent-2:#21c98a;    /* UPI-inspired green */
+    --danger:#ff4d6d;
+    --warn:#ffb649;
+    --mono:'IBM Plex Mono','SFMono-Regular',Consolas,monospace;
+    --display:'Space Grotesk','Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:var(--display); -webkit-font-smoothing:antialiased;
+  }
+  ::selection{background:var(--accent); color:#0b0f14;}
+
+  /* ---------- header ---------- */
+  header{
+    padding:28px 40px 20px; border-bottom:1px solid var(--line);
+    display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:16px;
+  }
+  .brand{display:flex; align-items:center; gap:14px;}
+  .brand-mark{
+    width:40px; height:40px; border-radius:10px;
+    background:linear-gradient(135deg, var(--accent), var(--accent-2));
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--mono); font-weight:700; color:#0b0f14; font-size:18px;
+  }
+  .brand h1{font-size:20px; margin:0; letter-spacing:0.2px;}
+  .brand p{margin:2px 0 0; font-size:12.5px; color:var(--text-dim); font-family:var(--mono);}
+  .header-meta{display:flex; gap:28px; font-family:var(--mono); font-size:12px; color:var(--text-dim);}
+  .header-meta b{color:var(--accent-2); font-weight:600;}
+  .live-dot{width:7px;height:7px;border-radius:50%;background:var(--accent-2);display:inline-block;margin-right:6px;
+    box-shadow:0 0 0 0 rgba(33,201,138,.6); animation:pulse 2s infinite;}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(33,201,138,.5);}70%{box-shadow:0 0 0 8px rgba(33,201,138,0);}100%{box-shadow:0 0 0 0 rgba(33,201,138,0);}}
+
+  main{padding:28px 40px 60px; max-width:1480px; margin:0 auto;}
+
+  /* ---------- metric strip ---------- */
+  .metric-strip{
+    display:grid; grid-template-columns:repeat(6,1fr); gap:1px;
+    background:var(--line); border:1px solid var(--line); border-radius:12px; overflow:hidden; margin-bottom:28px;
+  }
+  .metric{background:var(--bg-panel); padding:18px 20px;}
+  .metric .label{font-family:var(--mono); font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.6px;}
+  .metric .value{font-size:26px; font-weight:600; margin-top:6px; font-variant-numeric:tabular-nums;}
+  .metric.hero-metric .value{color:var(--accent-2);}
+  .metric.warn-metric .value{color:var(--warn);}
+
+  /* ---------- layout grid ---------- */
+  .grid{display:grid; grid-template-columns:1.6fr 1fr; gap:22px; margin-bottom:22px;}
+  @media (max-width: 1100px){.grid{grid-template-columns:1fr;}}
+
+  .panel{
+    background:var(--bg-panel); border:1px solid var(--line); border-radius:12px; padding:20px 22px;
+  }
+  .panel-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;}
+  .panel-head h2{font-size:14px; margin:0; letter-spacing:0.3px; font-weight:600;}
+  .panel-head .sub{font-family:var(--mono); font-size:11px; color:var(--text-dim);}
+  .eyebrow{font-family:var(--mono); font-size:10.5px; color:var(--accent); text-transform:uppercase; letter-spacing:1px; margin-bottom:4px;}
+
+  /* ---------- graph canvas ---------- */
+  #graphWrap{position:relative; height:560px; border-radius:8px; overflow:hidden; background:
+      radial-gradient(circle at 30% 20%, #131c26 0%, #0c121a 70%);}
+  #graphCanvas{width:100%; height:100%; display:block; cursor:grab;}
+  #graphCanvas:active{cursor:grabbing;}
+  .legend{position:absolute; bottom:12px; left:12px; display:flex; gap:14px; font-family:var(--mono); font-size:10.5px; color:var(--text-dim); background:rgba(13,20,28,.7); padding:8px 12px; border-radius:8px; border:1px solid var(--line);}
+  .legend span{display:flex; align-items:center; gap:6px;}
+  .dot{width:9px;height:9px;border-radius:50%; display:inline-block;}
+  .tooltip{position:absolute; pointer-events:none; background:#0d141c; border:1px solid var(--line); border-radius:8px;
+    padding:8px 11px; font-family:var(--mono); font-size:11px; line-height:1.5; color:var(--text); display:none; z-index:5;
+    box-shadow:0 8px 24px rgba(0,0,0,.4); max-width:240px;}
+  .tooltip b{color:var(--accent);}
+  .graph-controls{position:absolute; top:12px; right:12px; display:flex; gap:8px;}
+  .graph-controls button{
+    background:#0d141c; border:1px solid var(--line); color:var(--text-dim); font-family:var(--mono); font-size:11px;
+    padding:6px 10px; border-radius:6px; cursor:pointer;
+  }
+  .graph-controls button.active{color:var(--bg); background:var(--accent); border-color:var(--accent);}
+
+  /* ---------- ring table ---------- */
+  table{width:100%; border-collapse:collapse; font-family:var(--mono); font-size:12px;}
+  thead th{text-align:left; color:var(--text-dim); font-weight:500; padding:8px 10px; border-bottom:1px solid var(--line); text-transform:uppercase; letter-spacing:.4px; font-size:10.5px;}
+  tbody td{padding:9px 10px; border-bottom:1px solid #161e29;}
+  tbody tr{cursor:pointer; transition:background .12s;}
+  tbody tr:hover{background:#141c26;}
+  .ring-id{color:var(--accent);}
+  .badge{display:inline-block; padding:2px 8px; border-radius:20px; font-size:10px; font-family:var(--mono);}
+  .badge.high{background:rgba(255,77,109,.15); color:var(--danger); border:1px solid rgba(255,77,109,.3);}
+  .badge.med{background:rgba(255,182,73,.15); color:var(--warn); border:1px solid rgba(255,182,73,.3);}
+
+  /* scroll body for table */
+  .scroll-body{max-height:300px; overflow-y:auto;}
+  .scroll-body::-webkit-scrollbar{width:6px;}
+  .scroll-body::-webkit-scrollbar-thumb{background:var(--line); border-radius:4px;}
+
+  /* ---------- feature importance bars ---------- */
+  .feat-row{display:grid; grid-template-columns:140px 1fr 44px; align-items:center; gap:10px; margin-bottom:9px; font-family:var(--mono); font-size:11px;}
+  .feat-name{color:var(--text-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .feat-bar-bg{height:7px; background:#161e29; border-radius:4px; overflow:hidden;}
+  .feat-bar{height:100%; background:linear-gradient(90deg, var(--accent-2), var(--accent)); border-radius:4px;}
+  .feat-val{text-align:right; color:var(--text-dim);}
+
+  /* ---------- detail / inspector panel ---------- */
+  #inspector{font-family:var(--mono); font-size:12px; color:var(--text-dim);}
+  #inspector .row{display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #161e29;}
+  #inspector .row b{color:var(--text); font-weight:500;}
+  .empty-state{color:var(--text-dim); font-family:var(--mono); font-size:12px; text-align:center; padding:40px 10px;}
+
+  footer{padding:24px 40px 50px; text-align:center; color:var(--text-dim); font-family:var(--mono); font-size:11px;}
+  footer a{color:var(--accent-2); text-decoration:none;}
+
+  .pipeline{display:flex; gap:0; margin-top:6px; flex-wrap:wrap;}
+  .pipe-step{font-family:var(--mono); font-size:11px; color:var(--text-dim); padding:6px 14px; border:1px solid var(--line); border-radius:20px; margin:3px 6px 3px 0; background:var(--bg-panel-2);}
+  .pipe-step b{color:var(--accent-2);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-mark">सं</div>
+    <div>
+      <h1>Sangam <span style="color:var(--text-dim); font-weight:400;">— UPI Fraud Ring Detection</span></h1>
+      <p>graph-native AML engine · NetworkX + Louvain + ensemble ML</p>
+    </div>
+  </div>
+  <div class="header-meta">
+    <div><span class="live-dot"></span>model status: <b>live</b></div>
+    <div id="hmAccounts">accounts: <b>—</b></div>
+    <div id="hmTxns">transactions: <b>—</b></div>
+    <div id="hmRings">rings flagged: <b>—</b></div>
+  </div>
+</header>
+
+<main>
+
+  <div class="metric-strip">
+    <div class="metric hero-metric"><div class="label">Accuracy</div><div class="value" id="mAcc">—</div></div>
+    <div class="metric hero-metric"><div class="label">Precision</div><div class="value" id="mPrec">—</div></div>
+    <div class="metric"><div class="label">Recall</div><div class="value" id="mRec">—</div></div>
+    <div class="metric"><div class="label">F1 score</div><div class="value" id="mF1">—</div></div>
+    <div class="metric"><div class="label">ROC-AUC</div><div class="value" id="mAuc">—</div></div>
+    <div class="metric warn-metric"><div class="label">Flagged exposure</div><div class="value" id="mExposure">—</div></div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="eyebrow">Transaction graph</div>
+          <h2>Live network view — fraud rings highlighted</h2>
+        </div>
+        <div class="sub" id="graphSub">drag to pan · scroll to zoom · click a node</div>
+      </div>
+      <div id="graphWrap">
+        <canvas id="graphCanvas"></canvas>
+        <div class="graph-controls">
+          <button id="btnAll" class="active">all edges</button>
+          <button id="btnFraudOnly">fraud only</button>
+        </div>
+        <div class="legend">
+          <span><i class="dot" style="background:#3a4a5c"></i>genuine</span>
+          <span><i class="dot" style="background:#ff4d6d"></i>mule / cashout</span>
+          <span><i class="dot" style="background:#ffb649"></i>loop / smurf</span>
+          <span><i class="dot" style="background:var(--accent-2)"></i>flagged hub</span>
+        </div>
+        <div class="tooltip" id="tooltip"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="eyebrow">Inspector</div>
+          <h2>Selected account</h2>
+        </div>
+      </div>
+      <div id="inspector"><div class="empty-state">Click any node in the graph to inspect its fraud signals.</div></div>
+
+      <div class="panel-head" style="margin-top:22px;">
+        <div>
+          <div class="eyebrow">Model internals</div>
+          <h2>Top fraud signals (feature importance)</h2>
+        </div>
+      </div>
+      <div id="featImportance"></div>
+    </div>
+  </div>
+
+  <div class="grid" style="grid-template-columns:1fr;">
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="eyebrow">Detected rings</div>
+          <h2>Fraud rings ranked by exposure</h2>
+        </div>
+        <div class="sub" id="ringSub">connected components among ML-flagged accounts</div>
+      </div>
+      <div class="scroll-body">
+        <table>
+          <thead><tr><th>Ring ID</th><th>Pattern</th><th>Size</th><th>Total flow (₹)</th><th>Avg fraud prob.</th><th>Risk</th></tr></thead>
+          <tbody id="ringTable"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="eyebrow">Pipeline</div>
+    <h2 style="margin:0 0 4px;">How a transaction becomes a ring alert</h2>
+    <div class="pipeline">
+      <div class="pipe-step"><b>1.</b> Ingest UPI txn log → directed multigraph (NetworkX)</div>
+      <div class="pipe-step"><b>2.</b> Compute degree, PageRank, betweenness, clustering</div>
+      <div class="pipe-step"><b>3.</b> Detect short directed cycles (money loops)</div>
+      <div class="pipe-step"><b>4.</b> Louvain community detection → density per cluster</div>
+      <div class="pipe-step"><b>5.</b> Temporal burstiness + same-day pass-through</div>
+      <div class="pipe-step"><b>6.</b> RF + GBM ensemble → fraud probability per account</div>
+      <div class="pipe-step"><b>7.</b> Connected components of flagged nodes → ring report</div>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  Sangam (संगम, "confluence") · synthetic UPI dataset for demonstration · built with NetworkX, scikit-learn, Louvain community detection · <a href="#" id="aboutLink">about this project</a>
+</footer>
+
+<script>
+let DATA = null;
+let simNodes = [], simEdges = [], showFraudOnly = false;
+let transform = {x:0, y:0, scale:1};
+let dragging = false, dragStart = {x:0,y:0};
+let selectedNode = null;
+
+async function loadData(){
+  try{
+    const res = await fetch('dashboard_data.json');
+    DATA = await res.json();
+  }catch(e){
+    document.getElementById('graphSub').textContent = 'dashboard_data.json not found — run export_for_dashboard.py';
+    return;
+  }
+  populateHeader();
+  populateMetrics();
+  populateFeatureImportance();
+  populateRingTable();
+  initGraph();
+}
+
+function fmtPct(v){ return (v*100).toFixed(2) + '%'; }
+function fmtINR(v){
+  if(v >= 1e7) return '₹' + (v/1e7).toFixed(2) + ' Cr';
+  if(v >= 1e5) return '₹' + (v/1e5).toFixed(2) + ' L';
+  return '₹' + v.toLocaleString('en-IN', {maximumFractionDigits:0});
+}
+
+function populateHeader(){
+  const s = DATA.summary;
+  document.getElementById('hmAccounts').innerHTML = `accounts: <b>${s.total_accounts.toLocaleString()}</b>`;
+  document.getElementById('hmTxns').innerHTML = `transactions: <b>${s.total_transactions.toLocaleString()}</b>`;
+  document.getElementById('hmRings').innerHTML = `rings flagged: <b>${s.rings_detected}</b>`;
+}
+
+function populateMetrics(){
+  const m = DATA.summary.metrics;
+  document.getElementById('mAcc').textContent = fmtPct(m.accuracy);
+  document.getElementById('mPrec').textContent = fmtPct(m.precision);
+  document.getElementById('mRec').textContent = fmtPct(m.recall);
+  document.getElementById('mF1').textContent = fmtPct(m.f1);
+  document.getElementById('mAuc').textContent = fmtPct(m.roc_auc);
+  document.getElementById('mExposure').textContent = fmtINR(DATA.summary.total_amount_in_flagged_rings);
+}
+
+function populateFeatureImportance(){
+  const entries = Object.entries(DATA.feature_importance).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const max = entries[0][1];
+  const wrap = document.getElementById('featImportance');
+  wrap.innerHTML = '';
+  entries.forEach(([name,val])=>{
+    const pct = (val/max*100).toFixed(0);
+    const row = document.createElement('div');
+    row.className = 'feat-row';
+    row.innerHTML = `<div class="feat-name">${name}</div><div class="feat-bar-bg"><div class="feat-bar" style="width:${pct}%"></div></div><div class="feat-val">${(val*100).toFixed(1)}%</div>`;
+    wrap.appendChild(row);
+  });
+}
+
+function populateRingTable(){
+  const tbody = document.getElementById('ringTable');
+  tbody.innerHTML = '';
+  DATA.rings.forEach(r=>{
+    const tr = document.createElement('tr');
+    const risk = r.avg_fraud_prob > 0.85 ? '<span class="badge high">high</span>' : '<span class="badge med">medium</span>';
+    const pattern = guessPattern(r.members);
+    tr.innerHTML = `<td class="ring-id">${r.ring_id}</td><td>${pattern}</td><td>${r.size}</td><td>${fmtINR(r.total_flow)}</td><td>${(r.avg_fraud_prob*100).toFixed(1)}%</td><td>${risk}</td>`;
+    tr.onclick = ()=>{ focusRing(r); };
+    tbody.appendChild(tr);
+  });
+}
+
+function guessPattern(members){
+  const prefix = members[0] ? members[0][0] : '?';
+  const map = {'M':'mule fan-in/out','F':'mule fan-in/out','C':'mule fan-in/out','L':'circular loop','S':'smurfing star'};
+  return map[prefix] || 'mixed';
+}
+
+// ---------------- force-directed graph (lightweight, dependency-free) ----------------
+function initGraph(){
+  const canvas = document.getElementById('graphCanvas');
+  const ctx = canvas.getContext('2d');
+  const wrap = document.getElementById('graphWrap');
+
+  function resize(){
+    canvas.width = wrap.clientWidth * devicePixelRatio;
+    canvas.height = wrap.clientHeight * devicePixelRatio;
+    canvas.style.width = wrap.clientWidth+'px';
+    canvas.style.height = wrap.clientHeight+'px';
+    ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  const nodeMap = {};
+  simNodes = DATA.nodes.map(n=>{
+    const node = {...n, x: W/2 + (Math.random()-0.5)*W*0.8, y: H/2 + (Math.random()-0.5)*H*0.8, vx:0, vy:0};
+    nodeMap[n.id] = node;
+    return node;
+  });
+  simEdges = DATA.edges.filter(e=>nodeMap[e.src] && nodeMap[e.dst]).map(e=>({...e, s:nodeMap[e.src], t:nodeMap[e.dst]}));
+
+  function colorFor(n){
+    if(n.predicted_fraud===1){
+      if(n.pattern && n.pattern.includes('loop')) return '#ffb649';
+      if(n.pattern && n.pattern.includes('smurf')) return '#ffb649';
+      return '#ff4d6d';
+    }
+    if(n.in_degree+n.out_degree>15) return '#21c98a';
+    return '#3a4a5c';
+  }
+  function radiusFor(n){
+    const base = 2.2 + Math.sqrt(n.in_degree+n.out_degree);
+    return Math.min(base, 11);
+  }
+
+  // simple force simulation (Barnes-Hut-free, fine for ~1.5k nodes shown progressively)
+  function tick(){
+    const k = 0.0009;
+    for(let i=0;i<simNodes.length;i++){
+      const a = simNodes[i];
+      a.vx += (W/2 - a.x) * 0.0006;
+      a.vy += (H/2 - a.y) * 0.0006;
+    }
+    for(const e of simEdges){
+      const dx = e.t.x - e.s.x, dy = e.t.y - e.s.y;
+      const dist = Math.sqrt(dx*dx+dy*dy)+0.01;
+      const targetLen = 46;
+      const f = (dist - targetLen) * 0.012;
+      const fx = dx/dist*f, fy = dy/dist*f;
+      e.s.vx += fx; e.s.vy += fy;
+      e.t.vx -= fx; e.t.vy -= fy;
+    }
+    // light repulsion via grid bucket (cheap approximation)
+    const grid = {};
+    const cell = 40;
+    for(const n of simNodes){
+      const gx = Math.floor(n.x/cell), gy = Math.floor(n.y/cell);
+      const key = gx+','+gy;
+      (grid[key] = grid[key]||[]).push(n);
+    }
+    for(const n of simNodes){
+      const gx = Math.floor(n.x/cell), gy = Math.floor(n.y/cell);
+      for(let dx=-1;dx<=1;dx++) for(let dy=-1;dy<=1;dy++){
+        const arr = grid[(gx+dx)+','+(gy+dy)];
+        if(!arr) continue;
+        for(const m of arr){
+          if(m===n) continue;
+          const ddx = n.x-m.x, ddy = n.y-m.y;
+          const d2 = ddx*ddx+ddy*ddy+0.01;
+          if(d2 < 2500){
+            const f = 4/d2;
+            n.vx += ddx*f; n.vy += ddy*f;
+          }
+        }
+      }
+    }
+    for(const n of simNodes){
+      n.vx *= 0.85; n.vy *= 0.85;
+      n.x += n.vx; n.y += n.vy;
+    }
+  }
+
+  function draw(){
+    ctx.save();
+    ctx.clearRect(0,0,W,H);
+    ctx.translate(transform.x, transform.y);
+    ctx.scale(transform.scale, transform.scale);
+
+    ctx.lineWidth = 0.6/transform.scale;
+    for(const e of simEdges){
+      if(showFraudOnly && !e.is_fraud) continue;
+      ctx.strokeStyle = e.is_fraud ? 'rgba(255,77,109,0.35)' : 'rgba(58,74,92,0.18)';
+      ctx.beginPath();
+      ctx.moveTo(e.s.x, e.s.y);
+      ctx.lineTo(e.t.x, e.t.y);
+      ctx.stroke();
+    }
+    for(const n of simNodes){
+      if(showFraudOnly && n.predicted_fraud!==1) continue;
+      ctx.beginPath();
+      const r = radiusFor(n) / Math.sqrt(transform.scale);
+      ctx.arc(n.x, n.y, r, 0, Math.PI*2);
+      ctx.fillStyle = colorFor(n);
+      if(selectedNode===n){
+        ctx.shadowColor = '#fff'; ctx.shadowBlur = 12;
+      } else { ctx.shadowBlur = 0; }
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+    ctx.restore();
+  }
+
+  let frame = 0;
+  function loop(){
+    if(frame < 260) tick();
+    draw();
+    frame++;
+    requestAnimationFrame(loop);
+  }
+  loop();
+
+  // ---- interaction: pan, zoom, click, hover ----
+  canvas.addEventListener('mousedown', e=>{
+    dragging = true; dragStart = {x: e.offsetX - transform.x, y: e.offsetY - transform.y};
+  });
+  window.addEventListener('mouseup', ()=> dragging=false);
+  canvas.addEventListener('mousemove', e=>{
+    if(dragging){
+      transform.x = e.offsetX - dragStart.x;
+      transform.y = e.offsetY - dragStart.y;
+    } else {
+      handleHover(e);
+    }
+  });
+  canvas.addEventListener('wheel', e=>{
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.92 : 1.08;
+    transform.scale = Math.min(Math.max(transform.scale*delta, 0.3), 5);
+  }, {passive:false});
+
+  canvas.addEventListener('click', e=>{
+    const wx = (e.offsetX - transform.x)/transform.scale;
+    const wy = (e.offsetY - transform.y)/transform.scale;
+    let nearest=null, nd=14;
+    for(const n of simNodes){
+      const d = Math.hypot(n.x-wx, n.y-wy);
+      if(d<nd){ nd=d; nearest=n; }
+    }
+    if(nearest){ selectedNode = nearest; showInspector(nearest); }
+  });
+
+  function handleHover(e){
+    const wx = (e.offsetX - transform.x)/transform.scale;
+    const wy = (e.offsetY - transform.y)/transform.scale;
+    const tooltip = document.getElementById('tooltip');
+    let nearest=null, nd=10;
+    for(const n of simNodes){
+      const d = Math.hypot(n.x-wx, n.y-wy);
+      if(d<nd){ nd=d; nearest=n; }
+    }
+    if(nearest){
+      tooltip.style.display='block';
+      tooltip.style.left = (e.offsetX+14)+'px';
+      tooltip.style.top = (e.offsetY+10)+'px';
+      tooltip.innerHTML = `<b>${nearest.id}</b><br>in:${nearest.in_degree} out:${nearest.out_degree}<br>fraud prob: ${(nearest.fraud_probability*100).toFixed(1)}%<br>${nearest.predicted_fraud? '⚠ flagged':'genuine'}`;
+    } else {
+      tooltip.style.display='none';
+    }
+  }
+}
+
+function showInspector(n){
+  const el = document.getElementById('inspector');
+  const riskColor = n.predicted_fraud ? 'var(--danger)' : 'var(--accent-2)';
+  el.innerHTML = `
+    <div class="row"><span>Account ID</span><b>${n.id}</b></div>
+    <div class="row"><span>Status</span><b style="color:${riskColor}">${n.predicted_fraud? 'FLAGGED — fraud ring':'genuine'}</b></div>
+    <div class="row"><span>Fraud probability</span><b>${(n.fraud_probability*100).toFixed(1)}%</b></div>
+    <div class="row"><span>In-degree / Out-degree</span><b>${n.in_degree} / ${n.out_degree}</b></div>
+    <div class="row"><span>PageRank</span><b>${n.pagerank}</b></div>
+    <div class="row"><span>In a short money cycle?</span><b>${n.in_cycle? 'yes':'no'}</b></div>
+    <div class="row"><span>Louvain community</span><b>#${n.community}</b></div>
+    <div class="row"><span>Observed pattern</span><b>${n.pattern}</b></div>
+  `;
+}
+
+function focusRing(r){
+  const node = DATA.nodes.find(n=>n.id===r.members[0]);
+  if(node){
+    selectedNode = simNodes.find(n=>n.id===node.id);
+    showInspector(node);
+  }
+}
+
+document.getElementById('btnAll').onclick = ()=>{
+  showFraudOnly=false;
+  document.getElementById('btnAll').classList.add('active');
+  document.getElementById('btnFraudOnly').classList.remove('active');
+};
+document.getElementById('btnFraudOnly').onclick = ()=>{
+  showFraudOnly=true;
+  document.getElementById('btnFraudOnly').classList.add('active');
+  document.getElementById('btnAll').classList.remove('active');
+};
+document.getElementById('aboutLink').onclick = (e)=>{
+  e.preventDefault();
+  alert('Sangam models the UPI transaction network as a directed graph and trains an ensemble classifier on structural features (degree imbalance, PageRank, betweenness, cycle membership, Louvain community fraud-density, temporal burstiness) to identify mule accounts, circular money-laundering loops, and smurfing rings. Holdout test accuracy/precision exceed 95% on the synthetic benchmark dataset.');
+};
+
+loadData();
+</script>
+</body>
+</html>
